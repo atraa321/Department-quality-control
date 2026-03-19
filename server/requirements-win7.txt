@@ -1,0 +1,11 @@
+# Win7 recommended interpreter: Python 3.8.x 64-bit
+# Note: Python 3.7 is not supported by the current dependency chain.
+Flask==2.3.3
+Flask-SQLAlchemy==3.1.1
+Flask-JWT-Extended==4.6.0
+Flask-CORS==4.0.0
+Werkzeug==2.3.8
+SQLAlchemy==2.0.25
+openpyxl==3.1.2
+python-docx==1.1.0
+APScheduler==3.10.4

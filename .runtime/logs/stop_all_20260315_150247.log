@@ -1,0 +1,8 @@
+[周日 2026/03/15 15:02:47.62] [状态] 服务端 当前没有后台运行记录。
+[周日 2026/03/15 15:02:47.62] 服务端 未记录 PID，跳过。
+SUCCESS: The process with PID 34684 (child process of PID 25164) has been terminated.
+SUCCESS: The process with PID 25164 (child process of PID 26676) has been terminated.
+[周日 2026/03/15 15:02:48.74] 客户端 已停止，PID=25164
+[周日 2026/03/15 15:02:48.75].
+[周日 2026/03/15 15:02:48.75] 处理完成。
+[周日 2026/03/15 15:02:48.75] 日志文件：D:\我开发的项目\科室业务平台V3\.runtime\logs\stop_all_20260315_150247.log

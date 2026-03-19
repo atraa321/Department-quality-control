@@ -1,0 +1,10 @@
+SUCCESS: The process with PID 42344 (child process of PID 42284) has been terminated.
+SUCCESS: The process with PID 32072 (child process of PID 42284) has been terminated.
+SUCCESS: The process with PID 42284 (child process of PID 44336) has been terminated.
+[周日 2026/03/15 15:01:04.00] 服务端 已停止，PID=42284
+SUCCESS: The process with PID 37440 (child process of PID 6744) has been terminated.
+SUCCESS: The process with PID 6744 (child process of PID 20844) has been terminated.
+[周日 2026/03/15 15:01:04.84] 客户端 已停止，PID=6744
+[周日 2026/03/15 15:01:04.84].
+[周日 2026/03/15 15:01:04.84] 处理完成。
+[周日 2026/03/15 15:01:04.84] 日志文件：D:\我开发的项目\科室业务平台V3\.runtime\logs\stop_all_20260315_150103.log

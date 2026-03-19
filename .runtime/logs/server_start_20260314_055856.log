@@ -1,0 +1,40 @@
+[周六 2026/03/14  5:58:57.30] [状态] 检测到失效的服务端 PID 标记，已自动清理。
+[周六 2026/03/14  5:58:57.76] [2/4] 安装或更新后端依赖...
+Looking in indexes: https://mirrors.aliyun.com/pypi/simple/
+Requirement already satisfied: pip in .\.venv\Lib\site-packages (26.0.1)
+Looking in indexes: https://mirrors.aliyun.com/pypi/simple/
+Requirement already satisfied: Flask==2.3.3 in .\.venv\Lib\site-packages (from -r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 1)) (2.3.3)
+Requirement already satisfied: Flask-SQLAlchemy==3.1.1 in .\.venv\Lib\site-packages (from -r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 2)) (3.1.1)
+Requirement already satisfied: Flask-JWT-Extended==4.6.0 in .\.venv\Lib\site-packages (from -r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 3)) (4.6.0)
+Requirement already satisfied: Flask-CORS==4.0.0 in .\.venv\Lib\site-packages (from -r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 4)) (4.0.0)
+Requirement already satisfied: Werkzeug==2.3.8 in .\.venv\Lib\site-packages (from -r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 5)) (2.3.8)
+Requirement already satisfied: SQLAlchemy==2.0.25 in .\.venv\Lib\site-packages (from -r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 6)) (2.0.25)
+Requirement already satisfied: openpyxl==3.1.2 in .\.venv\Lib\site-packages (from -r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 7)) (3.1.2)
+Requirement already satisfied: python-docx==1.1.0 in .\.venv\Lib\site-packages (from -r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 8)) (1.1.0)
+Requirement already satisfied: pandas==2.1.4 in .\.venv\Lib\site-packages (from -r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 9)) (2.1.4)
+Requirement already satisfied: APScheduler==3.10.4 in .\.venv\Lib\site-packages (from -r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 10)) (3.10.4)
+Requirement already satisfied: Jinja2>=3.1.2 in .\.venv\Lib\site-packages (from Flask==2.3.3->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 1)) (3.1.6)
+Requirement already satisfied: itsdangerous>=2.1.2 in .\.venv\Lib\site-packages (from Flask==2.3.3->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 1)) (2.2.0)
+Requirement already satisfied: click>=8.1.3 in .\.venv\Lib\site-packages (from Flask==2.3.3->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 1)) (8.3.1)
+Requirement already satisfied: blinker>=1.6.2 in .\.venv\Lib\site-packages (from Flask==2.3.3->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 1)) (1.9.0)
+Requirement already satisfied: PyJWT<3.0,>=2.0 in .\.venv\Lib\site-packages (from Flask-JWT-Extended==4.6.0->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 3)) (2.11.0)
+Requirement already satisfied: MarkupSafe>=2.1.1 in .\.venv\Lib\site-packages (from Werkzeug==2.3.8->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 5)) (3.0.3)
+Requirement already satisfied: typing-extensions>=4.6.0 in .\.venv\Lib\site-packages (from SQLAlchemy==2.0.25->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 6)) (4.15.0)
+Requirement already satisfied: greenlet!=0.4.17 in .\.venv\Lib\site-packages (from SQLAlchemy==2.0.25->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 6)) (3.3.2)
+Requirement already satisfied: et-xmlfile in .\.venv\Lib\site-packages (from openpyxl==3.1.2->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 7)) (2.0.0)
+Requirement already satisfied: lxml>=3.1.0 in .\.venv\Lib\site-packages (from python-docx==1.1.0->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 8)) (6.0.2)
+Requirement already satisfied: numpy<2,>=1.26.0 in .\.venv\Lib\site-packages (from pandas==2.1.4->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 9)) (1.26.4)
+Requirement already satisfied: python-dateutil>=2.8.2 in .\.venv\Lib\site-packages (from pandas==2.1.4->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 9)) (2.9.0.post0)
+Requirement already satisfied: pytz>=2020.1 in .\.venv\Lib\site-packages (from pandas==2.1.4->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 9)) (2026.1.post1)
+Requirement already satisfied: tzdata>=2022.1 in .\.venv\Lib\site-packages (from pandas==2.1.4->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 9)) (2025.3)
+Requirement already satisfied: six>=1.4.0 in .\.venv\Lib\site-packages (from APScheduler==3.10.4->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 10)) (1.17.0)
+Requirement already satisfied: tzlocal!=3.*,>=2.0 in .\.venv\Lib\site-packages (from APScheduler==3.10.4->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 10)) (5.3.1)
+Requirement already satisfied: colorama in .\.venv\Lib\site-packages (from click>=8.1.3->Flask==2.3.3->-r D:\我开发的项目\科室业务平台V3\server\requirements.txt (line 1)) (0.4.6)
+[周六 2026/03/14  5:59:01.04] [4/4] 启动服务...
+[周六 2026/03/14  5:59:01.04]   本机访问: http://localhost:5000
+[周六 2026/03/14  5:59:01.04]   默认管理员: admin / admin123
+[周六 2026/03/14  5:59:01.04].
+[周六 2026/03/14  5:59:01.04] ================================================
+[周六 2026/03/14  5:59:01.04]   服务端将转入后台运行
+[周六 2026/03/14  5:59:01.04] ================================================
+[周六 2026/03/14  5:59:01.04].

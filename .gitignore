@@ -1,0 +1,5 @@
+release/
+.venv/
+.venv_win7/
+__pycache__/
+node_modules/
