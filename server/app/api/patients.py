@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm import joinedload
+from sqlalchemy import and_
 
 from app import db
 from app.models.patient import DischargedPatient, build_followup_status_map
@@ -38,12 +39,18 @@ def list_patients():
     start = request.args.get("start")
     end = request.args.get("end")
     batch = request.args.get("batch")
+    department = request.args.get("department")
+    doctor = request.args.get("doctor")
     if start:
         query = query.filter(DischargedPatient.discharge_date >= date.fromisoformat(start))
     if end:
         query = query.filter(DischargedPatient.discharge_date <= date.fromisoformat(end))
     if batch:
         query = query.filter_by(import_batch=batch)
+    if department:
+        query = query.filter_by(discharge_department=department)
+    if doctor and user.role != "doctor":
+        query = query.filter_by(attending_doctor=doctor)
 
     items = query.order_by(DischargedPatient.discharge_date.desc()).all()
     return jsonify(_serialize_patients(items))
@@ -74,24 +81,41 @@ def import_patients():
     except Exception as e:
         return jsonify({"msg": f"文件解析失败: {str(e)}"}), 400
 
-    count = 0
+    created_count = 0
+    updated_count = 0
     for p in patients:
+        patient = _find_existing_patient(p)
+        if patient:
+            _merge_patient_fields(patient, p, batch_name)
+            updated_count += 1
+            continue
+
         patient = DischargedPatient(
             patient_name=p.get("patient_name", ""),
             record_no=p.get("record_no", ""),
             gender=p.get("gender", ""),
             age=p.get("age"),
             diagnosis=p.get("diagnosis", ""),
+            phone=p.get("phone", ""),
+            address=p.get("address", ""),
+            discharge_department=p.get("discharge_department", ""),
             admission_date=p.get("admission_date"),
             discharge_date=p.get("discharge_date"),
             attending_doctor=p.get("attending_doctor", ""),
             import_batch=batch_name,
         )
         db.session.add(patient)
-        count += 1
+        created_count += 1
 
     db.session.commit()
-    return jsonify({"msg": f"成功导入 {count} 条记录", "batch": batch_name, "count": count})
+    count = created_count + updated_count
+    return jsonify({
+        "msg": f"成功导入 {count} 条记录，新增 {created_count} 条，更新 {updated_count} 条",
+        "batch": batch_name,
+        "count": count,
+        "created_count": created_count,
+        "updated_count": updated_count,
+    })
 
 
 @patients_bp.route("/template", methods=["GET"])
@@ -153,7 +177,7 @@ def backup_patients():
     patient_ws = wb.active
     patient_ws.title = "出院患者数据备份"
     patient_headers = [
-        "患者姓名", "病案号", "性别", "年龄", "诊断", "入院日期", "出院日期",
+        "患者姓名", "病案号", "性别", "年龄", "诊断", "电话", "住址", "出院科室", "入院日期", "出院日期",
         "主管医师", "导入批次", "导入时间", "医师回访", "护士回访",
     ]
     patient_ws.append(patient_headers)
@@ -166,6 +190,9 @@ def backup_patients():
             item.gender,
             item.age,
             item.diagnosis,
+            item.phone,
+            item.address,
+            item.discharge_department,
             item.admission_date.isoformat() if item.admission_date else "",
             item.discharge_date.isoformat() if item.discharge_date else "",
             item.attending_doctor,
@@ -232,3 +259,48 @@ def delete_patient(pid):
     db.session.delete(item)
     db.session.commit()
     return jsonify({"msg": "已删除"})
+
+
+def _find_existing_patient(payload):
+    record_no = (payload.get("record_no") or "").strip()
+    if record_no:
+        existing = DischargedPatient.query.filter_by(record_no=record_no).first()
+        if existing:
+            return existing
+
+    patient_name = (payload.get("patient_name") or "").strip()
+    discharge_date = payload.get("discharge_date")
+    if patient_name and discharge_date:
+        return DischargedPatient.query.filter(
+            and_(
+                DischargedPatient.patient_name == patient_name,
+                DischargedPatient.discharge_date == discharge_date,
+            )
+        ).order_by(DischargedPatient.id.asc()).first()
+    return None
+
+
+def _merge_patient_fields(patient, payload, batch_name):
+    patient.import_batch = batch_name
+    if payload.get("patient_name"):
+        patient.patient_name = payload["patient_name"]
+    if payload.get("record_no"):
+        patient.record_no = payload["record_no"]
+    if payload.get("gender"):
+        patient.gender = payload["gender"]
+    if payload.get("age") is not None:
+        patient.age = payload["age"]
+    if payload.get("diagnosis"):
+        patient.diagnosis = payload["diagnosis"]
+    if payload.get("phone"):
+        patient.phone = payload["phone"]
+    if payload.get("address"):
+        patient.address = payload["address"]
+    if payload.get("discharge_department"):
+        patient.discharge_department = payload["discharge_department"]
+    if payload.get("admission_date"):
+        patient.admission_date = payload["admission_date"]
+    if payload.get("discharge_date"):
+        patient.discharge_date = payload["discharge_date"]
+    if payload.get("attending_doctor"):
+        patient.attending_doctor = payload["attending_doctor"]

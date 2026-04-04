@@ -22,9 +22,11 @@ class WindowManager:
         self.page_windows = {}
 
     def show_main_workspace(self, section="dashboard"):
+        created = False
         if self.main_workspace is None:
             self.main_workspace = MainWorkspaceWindow(self.app_context)
             self.main_workspace.destroyed.connect(lambda *_: self._clear_main_workspace())
+            created = True
 
         self.main_workspace.open_section(section, refresh=False)
         if self.main_workspace.isMaximized():
@@ -33,7 +35,10 @@ class WindowManager:
             self.main_workspace.showMaximized()
         self.main_workspace.raise_()
         self.main_workspace.activateWindow()
-        self.main_workspace.refresh_content(silent=True)
+        if created:
+            self.main_workspace.schedule_section_refresh(section, delay_ms=120)
+        elif self.main_workspace.should_auto_refresh_section(section):
+            self.main_workspace.schedule_section_refresh(section, delay_ms=0)
         return self.main_workspace
 
     def show_page_window(self, key, factory):
@@ -80,30 +85,19 @@ class WindowManager:
 
     def show_task_manage_window(self):
         workspace = self.show_main_workspace(section="tasks")
-        window = workspace.get_section_page("tasks")
-        window.refresh_content(silent=True)
-        return window
+        return workspace.get_section_page("tasks")
 
     def show_user_manage_window(self):
         workspace = self.show_main_workspace(section="users")
-        window = workspace.get_section_page("users")
-        window.refresh_content(silent=True)
-        return window
+        return workspace.get_section_page("users")
 
     def show_report_window(self):
         workspace = self.show_main_workspace(section="reports")
-        window = workspace.get_section_page("reports")
-        window.refresh_content(silent=True)
-        return window
+        return workspace.get_section_page("reports")
 
     def show_patient_import_window(self):
         workspace = self.show_main_workspace(section="patients")
-        window = workspace.get_section_page("patients")
-        try:
-            window.refresh_content(silent=True)
-        except TypeError:
-            window.refresh_content()
-        return window
+        return workspace.get_section_page("patients")
 
     def refresh_open_windows(self):
         if self.main_workspace is not None and self.main_workspace.isVisible():

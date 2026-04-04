@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from async_worker import start_async_task
 from config import save_config
 
 
@@ -37,6 +38,7 @@ class ReportWindow(QMainWindow):
         self.api = app_context.api
         self.config = app_context.config
         self.summary = {}
+        self._refresh_token = 0
 
         self.setWindowTitle("数据汇总")
         self._restore_geometry()
@@ -132,19 +134,32 @@ class ReportWindow(QMainWindow):
             self.close()
             return
 
-        try:
-            self.summary = self.api.get_report_summary(**self._build_params())
-        except Exception as exc:
+        self._refresh_token += 1
+        token = self._refresh_token
+        self.summary_label.setText("汇总数据加载中...")
+        params = self._build_params()
+
+        def load():
+            return self.api.get_report_summary(**params)
+
+        def on_success(summary):
+            if token != self._refresh_token:
+                return
+            self.summary = summary
+            self.summary_label.setText("已按当前时间范围同步汇总数据")
+            self._populate_summary()
+
+        def on_error(exc):
+            if token != self._refresh_token:
+                return
             if self.app_context.handle_api_error(exc, self, "加载汇总数据失败"):
                 self.refresh_content(silent=silent)
                 return
             if not silent:
                 QMessageBox.warning(self, "刷新失败", str(exc))
             self.summary_label.setText("汇总数据加载失败")
-            return
 
-        self.summary_label.setText("已按当前时间范围同步汇总数据")
-        self._populate_summary()
+        start_async_task(self, load, on_success, on_error)
 
     def export_excel(self):
         module = self.excel_module_combo.currentData()

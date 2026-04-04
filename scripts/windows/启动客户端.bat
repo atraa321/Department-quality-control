@@ -3,6 +3,9 @@ chcp 65001 >nul
 setlocal EnableExtensions
 title 科室质控平台客户端启动器
 
+set "NO_PAUSE="
+if /I "%~1"=="--nopause" set "NO_PAUSE=1"
+
 echo ================================================
 echo   科室质控平台 - 桌面客户端启动
 echo ================================================
@@ -19,7 +22,7 @@ for /f %%i in ('powershell -NoProfile -Command "(Get-Date).ToString('yyyyMMdd_HH
 set "LOG_FILE=%LOG_DIR%\client_start_%TS%.log"
 set "CLIENT_PID_FILE=%RUNTIME_DIR%\client.pid"
 
-call :ensureNotRunning "%CLIENT_PID_FILE%" "客户端"
+call :ensure_not_running
 if errorlevel 2 (
     echo [状态] 客户端后台进程已存在。
     echo 客户端已在后台运行，无需重复启动。
@@ -27,14 +30,14 @@ if errorlevel 2 (
     echo [%date% %time%] [状态] 客户端后台进程已存在。
     echo [%date% %time%] 客户端已在后台运行，无需重复启动。
     )>> "%LOG_FILE%"
-    timeout /t 2 >nul
+    if not defined NO_PAUSE ping 127.0.0.1 -n 3 >nul
     exit /b 0
 )
 
 if not exist "%ROOT%\.venv\Scripts\python.exe" (
     echo [错误] 未找到虚拟环境，请先运行 启动服务器.bat 或手动创建 .venv
     >> "%LOG_FILE%" echo [%date% %time%] [错误] 未找到虚拟环境，请先运行 启动服务器.bat 或手动创建 .venv
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
@@ -47,18 +50,20 @@ echo [1/2] 检查客户端依赖...
 if errorlevel 1 (
     echo [错误] 客户端依赖安装失败，日志：%LOG_FILE%
     >> "%LOG_FILE%" echo [%date% %time%] [错误] 客户端依赖安装失败，日志：%LOG_FILE%
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
 echo [2/2] 启动客户端...
 >> "%LOG_FILE%" echo [%date% %time%] [2/2] 启动客户端...
 cd /d "%ROOT%"
+set "KSQC_CLIENT_PID_FILE=%CLIENT_PID_FILE%"
 if exist "%PYTHONW%" (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = Start-Process -FilePath '%PYTHONW%' -ArgumentList 'client\main.py','--start-hidden' -WorkingDirectory '%ROOT%' -WindowStyle Hidden -PassThru; Set-Content -Path '%RUNTIME_DIR%\client.pid' -Value $p.Id" >> "%LOG_FILE%" 2>&1
+    set "KSQC_CLIENT_PYTHON=%PYTHONW%"
 ) else (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = Start-Process -FilePath '%PYTHON%' -ArgumentList 'client\main.py','--start-hidden' -WorkingDirectory '%ROOT%' -WindowStyle Hidden -RedirectStandardOutput '%LOG_FILE%' -RedirectStandardError '%LOG_FILE%' -PassThru; Set-Content -Path '%RUNTIME_DIR%\client.pid' -Value $p.Id" >> "%LOG_FILE%" 2>&1
+    set "KSQC_CLIENT_PYTHON=%PYTHON%"
 )
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = Start-Process -FilePath $env:KSQC_CLIENT_PYTHON -ArgumentList 'client\main.py','--start-hidden' -WorkingDirectory '%ROOT%' -WindowStyle Hidden -PassThru; [System.IO.File]::WriteAllText($env:KSQC_CLIENT_PID_FILE, [string]$p.Id)" >> "%LOG_FILE%" 2>&1
 if errorlevel 1 (
     echo.
     echo [错误] 客户端后台启动失败，请检查运行环境。日志：%LOG_FILE%
@@ -66,7 +71,7 @@ if errorlevel 1 (
     echo [%date% %time%].
     echo [%date% %time%] [错误] 客户端后台启动失败，请检查运行环境。日志：%LOG_FILE%
     )>> "%LOG_FILE%"
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
@@ -80,25 +85,23 @@ echo [%date% %time%] 客户端已在后台启动。
 echo [%date% %time%] 如需停止，请运行 退出运行.bat
 echo [%date% %time%] 日志文件：%LOG_FILE%
 )>> "%LOG_FILE%"
-timeout /t 2 >nul
+if not defined NO_PAUSE ping 127.0.0.1 -n 3 >nul
 exit /b 0
 
-:ensureNotRunning
-set "PIDFILE=%~1"
-set "LABEL=%~2"
-if not exist "%PIDFILE%" exit /b 0
+:ensure_not_running
+if not exist "%CLIENT_PID_FILE%" exit /b 0
 
-set /p EXISTING_PID=<"%PIDFILE%"
+set /p EXISTING_PID=<"%CLIENT_PID_FILE%"
 if "%EXISTING_PID%"=="" (
     >> "%LOG_FILE%" echo [%date% %time%] [状态] 检测到空的客户端 PID 标记，已自动清理。
-    del /q "%PIDFILE%" >nul 2>&1
+    del /q "%CLIENT_PID_FILE%" >nul 2>&1
     exit /b 0
 )
 
 tasklist /FI "PID eq %EXISTING_PID%" | find "%EXISTING_PID%" >nul 2>&1
 if errorlevel 1 (
     >> "%LOG_FILE%" echo [%date% %time%] [状态] 检测到失效的客户端 PID 标记，已自动清理。
-    del /q "%PIDFILE%" >nul 2>&1
+    del /q "%CLIENT_PID_FILE%" >nul 2>&1
     exit /b 0
 )
 

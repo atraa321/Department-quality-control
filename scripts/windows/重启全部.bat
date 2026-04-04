@@ -3,6 +3,9 @@ chcp 65001 >nul
 setlocal EnableExtensions
 title 科室质控平台重启
 
+set "NO_PAUSE="
+if /I "%~1"=="--nopause" set "NO_PAUSE=1"
+
 set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 for %%I in ("%SCRIPT_DIR%\..\..") do set "ROOT=%%~fI"
@@ -12,8 +15,6 @@ set "LOG_DIR=%RUNTIME_DIR%\logs"
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 for /f %%i in ('powershell -NoProfile -Command "(Get-Date).ToString('yyyyMMdd_HHmmss')"') do set "TS=%%i"
 set "LOG_FILE=%LOG_DIR%\restart_all_%TS%.log"
-set "NO_PAUSE="
-if /I "%~1"=="--nopause" set "NO_PAUSE=1"
 
 echo ================================================
 echo   科室质控平台 - 重启全部组件
@@ -46,5 +47,5 @@ echo 日志文件：%LOG_FILE%
 echo [%date% %time%] 重启完成。
 echo [%date% %time%] 日志文件：%LOG_FILE%
 )>> "%LOG_FILE%"
-if not defined NO_PAUSE timeout /t 2 >nul
+if not defined NO_PAUSE ping 127.0.0.1 -n 3 >nul
 exit /b 0

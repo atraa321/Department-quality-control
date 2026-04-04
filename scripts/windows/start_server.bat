@@ -2,6 +2,9 @@
 setlocal EnableExtensions
 title KSQC Server Launcher
 
+set "NO_PAUSE="
+if /I "%~1"=="--nopause" set "NO_PAUSE=1"
+
 set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 for %%I in ("%SCRIPT_DIR%\..\..") do set "ROOT=%%~fI"
@@ -95,7 +98,12 @@ echo.
 >> "%LOG_FILE%" echo [%date% %time%] [4/4] Start server...
 
 cd /d "%ROOT%\server"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = Start-Process -FilePath '%PYTHON%' -ArgumentList 'run.py' -WorkingDirectory '%ROOT%\server' -WindowStyle Hidden -RedirectStandardOutput '%SERVER_STDOUT_LOG%' -RedirectStandardError '%SERVER_STDERR_LOG%' -PassThru; Set-Content -Path '%RUNTIME_DIR%\server.pid' -Value $p.Id"
+set "KSQC_PYTHON=%PYTHON%"
+set "KSQC_SERVER_DIR=%ROOT%\server"
+set "KSQC_SERVER_STDOUT=%SERVER_STDOUT_LOG%"
+set "KSQC_SERVER_STDERR=%SERVER_STDERR_LOG%"
+set "KSQC_SERVER_PID_FILE=%SERVER_PID_FILE%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = Start-Process -FilePath $env:KSQC_PYTHON -ArgumentList 'run.py' -WorkingDirectory $env:KSQC_SERVER_DIR -WindowStyle Hidden -RedirectStandardOutput $env:KSQC_SERVER_STDOUT -RedirectStandardError $env:KSQC_SERVER_STDERR -PassThru; [System.IO.File]::WriteAllText($env:KSQC_SERVER_PID_FILE, [string]$p.Id)"
 if errorlevel 1 (
     echo [ERROR] Background server start failed. Log: %LOG_FILE%
     >> "%LOG_FILE%" echo [%date% %time%] [ERROR] Background server start failed.
@@ -117,13 +125,13 @@ echo Log: %LOG_FILE%
 echo Out: %SERVER_STDOUT_LOG%
 echo Err: %SERVER_STDERR_LOG%
 >> "%LOG_FILE%" echo [%date% %time%] [OK] Server is running in background.
-if not defined NO_PAUSE timeout /t 2 >nul
+if not defined NO_PAUSE ping 127.0.0.1 -n 3 >nul
 exit /b 0
 
 :already_running
 echo [OK] Server is already running in background.
 >> "%LOG_FILE%" echo [%date% %time%] [OK] Server is already running in background.
-if not defined NO_PAUSE timeout /t 2 >nul
+if not defined NO_PAUSE ping 127.0.0.1 -n 3 >nul
 exit /b 0
 
 :port_conflict
@@ -135,7 +143,14 @@ exit /b 1
 :ensure_not_running
 if not exist "%SERVER_PID_FILE%" (
     call :get_port_owner
-    if defined PORT_OWNER exit /b 3
+    if defined PORT_OWNER (
+        call :is_our_server_pid "%PORT_OWNER%"
+        if not errorlevel 1 (
+            > "%SERVER_PID_FILE%" echo %PORT_OWNER%
+            exit /b 2
+        )
+        exit /b 3
+    )
     exit /b 0
 )
 
@@ -156,6 +171,8 @@ if errorlevel 1 (
 
 if defined PORT_OWNER (
     if "%PORT_OWNER%"=="%EXISTING_PID%" exit /b 2
+    call :is_our_server_pid "%PORT_OWNER%"
+    if not errorlevel 1 exit /b 2
     del /q "%SERVER_PID_FILE%" >nul 2>&1
     exit /b 3
 )
@@ -163,9 +180,18 @@ if defined PORT_OWNER (
 del /q "%SERVER_PID_FILE%" >nul 2>&1
 exit /b 0
 
+:is_our_server_pid
+for /f %%A in ("%~1") do set "CHECK_PID=%%~A"
+if "%CHECK_PID%"=="" exit /b 1
+tasklist /FI "PID eq %CHECK_PID%" | find /I "python.exe" >nul 2>&1
+if not errorlevel 1 exit /b 0
+tasklist /FI "PID eq %CHECK_PID%" | find /I "pythonw.exe" >nul 2>&1
+if not errorlevel 1 exit /b 0
+exit /b 1
+
 :get_port_owner
 set "PORT_OWNER="
-for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":5000 .*LISTENING"') do (
+for /f %%P in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "(Get-NetTCPConnection -State Listen -LocalPort 5000 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess)"') do (
     set "PORT_OWNER=%%P"
     goto :eof
 )
@@ -179,7 +205,7 @@ for /l %%N in (1,1,20) do (
         endlocal
         exit /b 0
     )
-    timeout /t 1 >nul
+    ping 127.0.0.1 -n 2 >nul
 )
 endlocal
 exit /b 1

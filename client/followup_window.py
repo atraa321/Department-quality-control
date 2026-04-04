@@ -1,4 +1,6 @@
-from PyQt5.QtCore import Qt, QDate
+import time
+
+from PyQt5.QtCore import Qt, QDate, QTimer
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -22,6 +24,7 @@ from PyQt5.QtWidgets import (
 )
 
 from config import save_config
+from async_worker import start_async_task
 
 
 METHOD_LABELS = {
@@ -152,6 +155,9 @@ class FollowupEditDialog(QDialog):
         return (
             f"患者：{patient.get('patient_name') or '-'}\n"
             f"病案号：{patient.get('record_no') or '-'}\n"
+            f"电话：{patient.get('phone') or '-'}\n"
+            f"住址：{patient.get('address') or '-'}\n"
+            f"出院科室：{patient.get('discharge_department') or '-'}\n"
             f"诊断：{patient.get('diagnosis') or '-'}\n"
             f"出院日期：{patient.get('discharge_date') or '-'}\n"
             f"主管医师：{patient.get('attending_doctor') or '-'}"
@@ -167,6 +173,8 @@ class FollowupEditDialog(QDialog):
 
 
 class FollowupWindow(QMainWindow):
+    AUTO_REFRESH_INTERVAL_MS = 15000
+
     def __init__(self, app_context, parent=None):
         super().__init__(parent)
         self.app_context = app_context
@@ -175,6 +183,8 @@ class FollowupWindow(QMainWindow):
         self.patients = []
         self.followups = []
         self.stats = []
+        self._last_refresh_at = None
+        self._refresh_token = 0
         self.edit_dialog = FollowupEditDialog(app_context, self)
 
         self.setWindowTitle("出院患者回访")
@@ -228,14 +238,24 @@ class FollowupWindow(QMainWindow):
         self.patient_end_date.setDate(QDate.currentDate())
         filters.addWidget(self.patient_end_date)
 
+        filters.addWidget(QLabel("出院科室"))
+        self.department_filter = QComboBox()
+        self.department_filter.addItem("全部科室", "")
+        filters.addWidget(self.department_filter)
+
+        filters.addWidget(QLabel("主管医师"))
+        self.doctor_filter = QComboBox()
+        self.doctor_filter.addItem("全部医师", "")
+        filters.addWidget(self.doctor_filter)
+
         patient_query_button = QPushButton("查询患者")
         patient_query_button.clicked.connect(self.load_patients)
         filters.addWidget(patient_query_button)
         filters.addStretch()
         layout.addLayout(filters)
 
-        self.patient_table = QTableWidget(0, 8, self)
-        self.patient_table.setHorizontalHeaderLabels(["患者", "病案号", "诊断", "出院日期", "主管医师", "医师回访", "护士回访", "操作"])
+        self.patient_table = QTableWidget(0, 11, self)
+        self.patient_table.setHorizontalHeaderLabels(["患者", "病案号", "电话", "住址", "出院科室", "诊断", "出院日期", "主管医师", "医师回访", "护士回访", "操作"])
         self.patient_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.patient_table.setSelectionMode(QTableWidget.SingleSelection)
         self.patient_table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -244,12 +264,15 @@ class FollowupWindow(QMainWindow):
         patient_header = self.patient_table.horizontalHeader()
         patient_header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
         patient_header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        patient_header.setSectionResizeMode(2, QHeaderView.Stretch)
-        patient_header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        patient_header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        patient_header.setSectionResizeMode(3, QHeaderView.Stretch)
         patient_header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        patient_header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        patient_header.setSectionResizeMode(5, QHeaderView.Stretch)
         patient_header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
         patient_header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
+        patient_header.setSectionResizeMode(8, QHeaderView.ResizeToContents)
+        patient_header.setSectionResizeMode(9, QHeaderView.ResizeToContents)
+        patient_header.setSectionResizeMode(10, QHeaderView.ResizeToContents)
         self.patient_table.itemDoubleClicked.connect(lambda *_: self.create_followup())
         layout.addWidget(self.patient_table)
 
@@ -373,35 +396,98 @@ class FollowupWindow(QMainWindow):
         super().closeEvent(event)
 
     def refresh_content(self, silent=False):
-        self.load_patients(silent=True)
-        self.load_followups(silent=True)
-        self.load_stats(silent=True)
+        self._refresh_token += 1
+        token = self._refresh_token
+        self.summary_label.setText("回访模块加载中...")
+
+        patient_params = {
+            "start": self.patient_start_date.date().toString("yyyy-MM-dd"),
+            "end": self.patient_end_date.date().toString("yyyy-MM-dd"),
+        }
         user = self.config.get("user") or {}
-        role_label = ROLE_LABELS.get(user.get("role"), user.get("role") or "用户")
-        self.summary_label.setText(f"当前回访角色：{role_label} | 待回访患者 {len(self.patients)} 人 | 已加载回访记录 {len(self.followups)} 条")
+        if user.get("role") != "doctor":
+            patient_params["department"] = self.department_filter.currentData()
+            patient_params["doctor"] = self.doctor_filter.currentData()
+
+        followup_params = {
+            "start": self.record_start_date.date().toString("yyyy-MM-dd"),
+            "end": self.record_end_date.date().toString("yyyy-MM-dd"),
+            "role": self.role_filter.currentData(),
+        }
+        stats_params = {
+            "start": self.stats_start_date.date().toString("yyyy-MM-dd"),
+            "end": self.stats_end_date.date().toString("yyyy-MM-dd"),
+        }
+
+        def load():
+            return {
+                "patients": self.api.list_patients(**patient_params),
+                "followups": self.api.list_followups(**followup_params),
+                "stats": self.api.get_followup_stats(**stats_params),
+            }
+
+        def on_success(payload):
+            if token != self._refresh_token:
+                return
+            self.patients = payload["patients"]
+            self.followups = payload["followups"]
+            self.stats = payload["stats"]
+            self._populate_filter_options()
+            self._populate_patient_table()
+            self._populate_followup_table()
+            self._populate_stats_table()
+            self._last_refresh_at = time.monotonic()
+            role_label = ROLE_LABELS.get(user.get("role"), user.get("role") or "用户")
+            self.summary_label.setText(f"当前回访角色：{role_label} | 待回访患者 {len(self.patients)} 人 | 已加载回访记录 {len(self.followups)} 条")
+
+        def on_error(exc):
+            if token != self._refresh_token:
+                return
+            if self.app_context.handle_api_error(exc, self, "加载回访数据失败"):
+                self.refresh_content(silent=silent)
+                return
+            if not silent:
+                QMessageBox.warning(self, "刷新失败", str(exc))
+            self.summary_label.setText("回访模块加载失败")
+
+        start_async_task(self, load, on_success, on_error)
 
     def open_for_task(self, task=None):
-        self.show()
-        self.raise_()
-        self.activateWindow()
         self.tabs.setCurrentWidget(self.todo_tab)
-        self.refresh_content(silent=True)
+        if self.should_auto_refresh():
+            self.schedule_refresh()
+
+    def should_auto_refresh(self):
+        if self._last_refresh_at is None:
+            return True
+        return (time.monotonic() - self._last_refresh_at) * 1000 >= self.AUTO_REFRESH_INTERVAL_MS
+
+    def schedule_refresh(self, delay_ms=0):
+        QTimer.singleShot(max(0, int(delay_ms)), lambda: self.refresh_content(silent=True))
 
     def load_patients(self, silent=False):
         params = {
             "start": self.patient_start_date.date().toString("yyyy-MM-dd"),
             "end": self.patient_end_date.date().toString("yyyy-MM-dd"),
         }
-        try:
-            self.patients = self.api.list_patients(**params)
-        except Exception as exc:
+        user = self.config.get("user") or {}
+        if user.get("role") != "doctor":
+            params["department"] = self.department_filter.currentData()
+            params["doctor"] = self.doctor_filter.currentData()
+        self.summary_label.setText("待回访患者加载中...")
+        def load():
+            return self.api.list_patients(**params)
+        def on_success(patients):
+            self.patients = patients
+            self._populate_filter_options()
+            self._populate_patient_table()
+        def on_error(exc):
             if self.app_context.handle_api_error(exc, self, "加载待回访患者失败"):
                 self.load_patients(silent=silent)
                 return
             if not silent:
                 QMessageBox.warning(self, "刷新失败", str(exc))
-            return
-        self._populate_patient_table()
+        start_async_task(self, load, on_success, on_error)
 
     def load_followups(self, silent=False):
         params = {
@@ -409,32 +495,36 @@ class FollowupWindow(QMainWindow):
             "end": self.record_end_date.date().toString("yyyy-MM-dd"),
             "role": self.role_filter.currentData(),
         }
-        try:
-            self.followups = self.api.list_followups(**params)
-        except Exception as exc:
+        def load():
+            return self.api.list_followups(**params)
+        def on_success(followups):
+            self.followups = followups
+            self._populate_followup_table()
+        def on_error(exc):
             if self.app_context.handle_api_error(exc, self, "加载回访记录失败"):
                 self.load_followups(silent=silent)
                 return
             if not silent:
                 QMessageBox.warning(self, "刷新失败", str(exc))
-            return
-        self._populate_followup_table()
+        start_async_task(self, load, on_success, on_error)
 
     def load_stats(self, silent=False):
         params = {
             "start": self.stats_start_date.date().toString("yyyy-MM-dd"),
             "end": self.stats_end_date.date().toString("yyyy-MM-dd"),
         }
-        try:
-            self.stats = self.api.get_followup_stats(**params)
-        except Exception as exc:
+        def load():
+            return self.api.get_followup_stats(**params)
+        def on_success(stats):
+            self.stats = stats
+            self._populate_stats_table()
+        def on_error(exc):
             if self.app_context.handle_api_error(exc, self, "加载工作量统计失败"):
                 self.load_stats(silent=silent)
                 return
             if not silent:
                 QMessageBox.warning(self, "刷新失败", str(exc))
-            return
-        self._populate_stats_table()
+        start_async_task(self, load, on_success, on_error)
 
     def create_followup(self):
         patient = self._selected_patient()
@@ -474,6 +564,9 @@ class FollowupWindow(QMainWindow):
             values = [
                 patient.get("patient_name") or "",
                 patient.get("record_no") or "",
+                patient.get("phone") or "",
+                patient.get("address") or "",
+                patient.get("discharge_department") or "",
                 patient.get("diagnosis") or "",
                 patient.get("discharge_date") or "",
                 patient.get("attending_doctor") or "",
@@ -489,6 +582,35 @@ class FollowupWindow(QMainWindow):
                 self.patient_table.setItem(row, column, item)
         if self.patients:
             self.patient_table.selectRow(0)
+
+    def _populate_filter_options(self):
+        user = self.config.get("user") or {}
+        if user.get("role") == "doctor":
+            self.department_filter.setEnabled(False)
+            self.doctor_filter.setEnabled(False)
+            return
+
+        self._set_combo_items(
+            self.department_filter,
+            "全部科室",
+            sorted({item.get("discharge_department") for item in self.patients if item.get("discharge_department")}),
+        )
+        self._set_combo_items(
+            self.doctor_filter,
+            "全部医师",
+            sorted({item.get("attending_doctor") for item in self.patients if item.get("attending_doctor")}),
+        )
+
+    def _set_combo_items(self, combo, empty_label, values):
+        current = combo.currentData()
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem(empty_label, "")
+        for value in values:
+            combo.addItem(value, value)
+        index = combo.findData(current)
+        combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.blockSignals(False)
 
     def _populate_followup_table(self):
         self.followup_table.setRowCount(len(self.followups))

@@ -1,6 +1,7 @@
 import os
+import time
 
-from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtCore import Qt, QDate, QTimer
 from PyQt5.QtWidgets import (
     QComboBox,
     QDateEdit,
@@ -24,6 +25,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from async_worker import start_async_task
 from config import save_config
 
 
@@ -321,12 +323,16 @@ class StudyDetailDialog(QDialog):
 
 
 class StudyWindow(QMainWindow):
+    AUTO_REFRESH_INTERVAL_MS = 15000
+
     def __init__(self, app_context, parent=None):
         super().__init__(parent)
         self.app_context = app_context
         self.api = app_context.api
         self.config = app_context.config
         self.records = []
+        self._last_refresh_at = None
+        self._refresh_token = 0
         self.edit_dialog = StudyEditDialog(app_context, self)
         self.detail_dialog = StudyDetailDialog(self)
 
@@ -435,26 +441,46 @@ class StudyWindow(QMainWindow):
             "start": self.start_date.date().toString("yyyy-MM-dd"),
             "end": self.end_date.date().toString("yyyy-MM-dd"),
         }
-        try:
-            self.records = self.api.list_studies(**params)
-        except Exception as exc:
+        self._refresh_token += 1
+        token = self._refresh_token
+        self.summary_label.setText("业务学习加载中...")
+
+        def load():
+            return self.api.list_studies(**params)
+
+        def on_success(records):
+            if token != self._refresh_token:
+                return
+            self.records = records
+            self._last_refresh_at = time.monotonic()
+            self.summary_label.setText(f"共 {len(self.records)} 条业务学习记录")
+            self._populate_table()
+
+        def on_error(exc):
+            if token != self._refresh_token:
+                return
             if self.app_context.handle_api_error(exc, self, "刷新业务学习失败"):
                 self.refresh_content(silent=silent)
                 return
             if not silent:
                 QMessageBox.warning(self, "刷新失败", str(exc))
             self.summary_label.setText("业务学习加载失败")
-            return
-        self.summary_label.setText(f"共 {len(self.records)} 条业务学习记录")
-        self._populate_table()
+
+        start_async_task(self, load, on_success, on_error)
 
     def open_for_task(self, task=None, auto_create=False):
-        self.show()
-        self.raise_()
-        self.activateWindow()
-        self.refresh_content(silent=True)
+        if self.should_auto_refresh():
+            self.schedule_refresh()
         if auto_create:
             self.create_record(task)
+
+    def should_auto_refresh(self):
+        if self._last_refresh_at is None:
+            return True
+        return (time.monotonic() - self._last_refresh_at) * 1000 >= self.AUTO_REFRESH_INTERVAL_MS
+
+    def schedule_refresh(self, delay_ms=0):
+        QTimer.singleShot(max(0, int(delay_ms)), lambda: self.refresh_content(silent=True))
 
     def create_record(self, task=None):
         if self.edit_dialog.open_for_create(task) == QDialog.Accepted:
@@ -513,28 +539,33 @@ class StudyWindow(QMainWindow):
         QMessageBox.information(self, "完成", "Word 已导出")
 
     def _populate_table(self):
-        self.table.setRowCount(len(self.records))
-        for row, record in enumerate(self.records):
-            values = [
-                record.get("record_no") or "",
-                record.get("study_date") or "",
-                record.get("topic") or "",
-                record.get("study_method") or "",
-                record.get("host") or "",
-                record.get("speaker") or "",
-                str(record.get("participant_count") or 0),
-                record.get("location") or "",
-                record.get("content") or "",
-                record.get("creator_name") or "",
-            ]
-            for column, value in enumerate(values):
-                item = QTableWidgetItem(value)
-                item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-                if column == 0:
-                    item.setData(Qt.UserRole, record)
-                self.table.setItem(row, column, item)
-        if self.records:
-            self.table.selectRow(0)
+        self.table.setUpdatesEnabled(False)
+        try:
+            self.table.setRowCount(len(self.records))
+            for row, record in enumerate(self.records):
+                values = [
+                    record.get("record_no") or "",
+                    record.get("study_date") or "",
+                    record.get("topic") or "",
+                    record.get("study_method") or "",
+                    record.get("host") or "",
+                    record.get("speaker") or "",
+                    str(record.get("participant_count") or 0),
+                    record.get("location") or "",
+                    record.get("content") or "",
+                    record.get("creator_name") or "",
+                ]
+                for column, value in enumerate(values):
+                    item = QTableWidgetItem(value)
+                    item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                    if column == 0:
+                        item.setData(Qt.UserRole, record)
+                    self.table.setItem(row, column, item)
+            if self.records:
+                self.table.selectRow(0)
+        finally:
+            self.table.setUpdatesEnabled(True)
+            self.table.viewport().update()
 
     def _selected_record(self):
         row = self.table.currentRow()

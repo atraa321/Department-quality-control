@@ -79,7 +79,7 @@ import { ElMessage } from "element-plus"
 
 const fieldLabels = {
   patient_name: "患者姓名", record_no: "病案号", gender: "性别", age: "年龄",
-  diagnosis: "诊断", admission_date: "入院日期", discharge_date: "出院日期", attending_doctor: "主管医师",
+  diagnosis: "诊断", phone: "电话", address: "住址", admission_date: "入院日期", discharge_date: "出院日期", attending_doctor: "主管医师",
 }
 const selectedFile = ref(null)
 const previewColumns = ref([])

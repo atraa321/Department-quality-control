@@ -14,6 +14,9 @@ class DischargedPatient(db.Model):
     gender = db.Column(db.String(8), default="")
     age = db.Column(db.Integer, nullable=True)
     diagnosis = db.Column(db.String(512), default="")
+    phone = db.Column(db.String(64), default="")
+    address = db.Column(db.String(255), default="")
+    discharge_department = db.Column(db.String(128), default="")
     admission_date = db.Column(db.Date, nullable=True)
     discharge_date = db.Column(db.Date, nullable=True)
     attending_doctor = db.Column(db.String(64), default="")
@@ -31,6 +34,9 @@ class DischargedPatient(db.Model):
             "gender": self.gender,
             "age": self.age,
             "diagnosis": self.diagnosis,
+            "phone": self.phone,
+            "address": self.address,
+            "discharge_department": self.discharge_department,
             "admission_date": self.admission_date.isoformat() if self.admission_date else None,
             "discharge_date": self.discharge_date.isoformat() if self.discharge_date else None,
             "attending_doctor": self.attending_doctor,

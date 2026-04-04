@@ -29,6 +29,9 @@ FIELD_LABELS = {
     "gender": "性别",
     "age": "年龄",
     "diagnosis": "诊断",
+    "phone": "电话",
+    "address": "住址",
+    "discharge_department": "出院科室",
     "admission_date": "入院日期",
     "discharge_date": "出院日期",
     "attending_doctor": "主管医师",
@@ -147,20 +150,21 @@ class BatchManageDialog(QDialog):
         patient_header.addWidget(delete_button)
         right_layout.addLayout(patient_header)
 
-        self.patient_table = QTableWidget(0, 8, self)
-        self.patient_table.setHorizontalHeaderLabels(["患者姓名", "病案号", "性别", "年龄", "诊断", "出院日期", "主管医师", "回访状态"])
+        self.patient_table = QTableWidget(0, 10, self)
+        self.patient_table.setHorizontalHeaderLabels(["患者姓名", "病案号", "性别", "年龄", "电话", "住址", "诊断", "出院日期", "主管医师", "回访状态"])
         self.patient_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.patient_table.setSelectionMode(QTableWidget.SingleSelection)
         self.patient_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.patient_table.setAlternatingRowColors(True)
         self.patient_table.verticalHeader().setVisible(False)
         patient_header_view = self.patient_table.horizontalHeader()
-        for column in range(4):
+        for column in range(5):
             patient_header_view.setSectionResizeMode(column, QHeaderView.ResizeToContents)
-        patient_header_view.setSectionResizeMode(4, QHeaderView.Stretch)
-        patient_header_view.setSectionResizeMode(5, QHeaderView.ResizeToContents)
-        patient_header_view.setSectionResizeMode(6, QHeaderView.ResizeToContents)
+        patient_header_view.setSectionResizeMode(5, QHeaderView.Stretch)
+        patient_header_view.setSectionResizeMode(6, QHeaderView.Stretch)
         patient_header_view.setSectionResizeMode(7, QHeaderView.ResizeToContents)
+        patient_header_view.setSectionResizeMode(8, QHeaderView.ResizeToContents)
+        patient_header_view.setSectionResizeMode(9, QHeaderView.ResizeToContents)
         right_layout.addWidget(self.patient_table)
         body.addWidget(right_frame, 2)
 
@@ -238,6 +242,8 @@ class BatchManageDialog(QDialog):
                 patient.get("record_no") or "",
                 patient.get("gender") or "",
                 "" if patient.get("age") is None else str(patient.get("age")),
+                patient.get("phone") or "",
+                patient.get("address") or "",
                 patient.get("diagnosis") or "",
                 patient.get("discharge_date") or "",
                 patient.get("attending_doctor") or "",

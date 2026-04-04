@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from async_worker import start_async_task
 from config import save_config
 
 
@@ -169,6 +170,7 @@ class UserManageWindow(QMainWindow):
         self.api = app_context.api
         self.config = app_context.config
         self.users = []
+        self._refresh_token = 0
         self.edit_dialog = UserEditDialog(self)
         self.password_dialog = PasswordChangeDialog(self)
 
@@ -268,20 +270,31 @@ class UserManageWindow(QMainWindow):
             self.close()
             return
 
-        try:
-            users = self.api.list_users()
-        except Exception as exc:
+        self._refresh_token += 1
+        token = self._refresh_token
+        self.summary_label.setText("用户数据加载中...")
+
+        def load():
+            return self.api.list_users()
+
+        def on_success(users):
+            if token != self._refresh_token:
+                return
+            self.users = self._filter_users(users)
+            self.summary_label.setText(f"当前共 {len(self.users)} 个用户")
+            self._populate_table()
+
+        def on_error(exc):
+            if token != self._refresh_token:
+                return
             if self.app_context.handle_api_error(exc, self, "加载用户列表失败"):
                 self.refresh_content(silent=silent)
                 return
             if not silent:
                 QMessageBox.warning(self, "刷新失败", str(exc))
             self.summary_label.setText("用户数据加载失败")
-            return
 
-        self.users = self._filter_users(users)
-        self.summary_label.setText(f"当前共 {len(self.users)} 个用户")
-        self._populate_table()
+        start_async_task(self, load, on_success, on_error)
 
     def _filter_users(self, users):
         role_value = self.role_filter.currentData()
@@ -300,19 +313,24 @@ class UserManageWindow(QMainWindow):
         return filtered
 
     def _populate_table(self):
-        self.table.setRowCount(len(self.users))
-        for row, user in enumerate(self.users):
-            username_item = QTableWidgetItem(user.get("username") or "")
-            username_item.setData(Qt.UserRole, user)
-            self.table.setItem(row, 0, username_item)
-            self.table.setItem(row, 1, QTableWidgetItem(user.get("real_name") or ""))
-            self.table.setItem(row, 2, QTableWidgetItem(ROLE_LABELS.get(user.get("role"), user.get("role") or "")))
-            self.table.setItem(row, 3, QTableWidgetItem("启用" if user.get("is_active") else "禁用"))
-            self.table.setItem(row, 4, QTableWidgetItem(user.get("created_at") or ""))
-            note = "当前登录账号" if user.get("id") == (self.config.get("user") or {}).get("id") else ""
-            self.table.setItem(row, 5, QTableWidgetItem(note))
-        if self.users:
-            self.table.selectRow(0)
+        self.table.setUpdatesEnabled(False)
+        try:
+            self.table.setRowCount(len(self.users))
+            for row, user in enumerate(self.users):
+                username_item = QTableWidgetItem(user.get("username") or "")
+                username_item.setData(Qt.UserRole, user)
+                self.table.setItem(row, 0, username_item)
+                self.table.setItem(row, 1, QTableWidgetItem(user.get("real_name") or ""))
+                self.table.setItem(row, 2, QTableWidgetItem(ROLE_LABELS.get(user.get("role"), user.get("role") or "")))
+                self.table.setItem(row, 3, QTableWidgetItem("启用" if user.get("is_active") else "禁用"))
+                self.table.setItem(row, 4, QTableWidgetItem(user.get("created_at") or ""))
+                note = "当前登录账号" if user.get("id") == (self.config.get("user") or {}).get("id") else ""
+                self.table.setItem(row, 5, QTableWidgetItem(note))
+            if self.users:
+                self.table.selectRow(0)
+        finally:
+            self.table.setUpdatesEnabled(True)
+            self.table.viewport().update()
 
     def _selected_user(self):
         row = self.table.currentRow()

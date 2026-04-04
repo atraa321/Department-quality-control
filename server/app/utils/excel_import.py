@@ -12,9 +12,26 @@ STANDARD_FIELDS = {
     "gender": "性别",
     "age": "年龄",
     "diagnosis": "诊断",
+    "phone": "电话",
+    "address": "住址",
+    "discharge_department": "出院科室",
     "admission_date": "入院日期",
     "discharge_date": "出院日期",
     "attending_doctor": "主管医师",
+}
+
+FIELD_ALIASES = {
+    "patient_name": ["患者姓名", "姓名"],
+    "record_no": ["病案号", "住院号"],
+    "gender": ["性别"],
+    "age": ["年龄"],
+    "diagnosis": ["诊断", "出院诊断", "门诊诊断", "入院诊断"],
+    "phone": ["电话", "联系电话", "联系方式", "手机号", "手机号码"],
+    "address": ["住址", "家庭住址", "现住址", "联系地址", "地址", " 现住址"],
+    "discharge_department": ["出院科室", "科室"],
+    "admission_date": ["入院日期"],
+    "discharge_date": ["出院日期"],
+    "attending_doctor": ["主管医师", "主治医师", "住院医师"],
 }
 
 
@@ -26,7 +43,7 @@ def generate_import_template():
     headers = list(STANDARD_FIELDS.values())
     ws.append(headers)
     # 示例数据
-    ws.append(["张三", "202601001", "男", 45, "高血压", "2026-01-01", "2026-01-10", "王医师"])
+    ws.append(["张三", "202601001", "男", 45, "高血压", "13800138000", "平顶山市湛河区示例路1号", "内分泌科", "2026-01-01", "2026-01-10", "王医师"])
 
     from flask import current_app
     template_dir = current_app.config.get("UPLOAD_FOLDER", "uploads")
@@ -97,20 +114,21 @@ def parse_patient_file(file_storage, column_map=None):
 def _build_field_map(headers, column_map):
     """根据列映射或自动匹配，建立列索引到字段名的映射"""
     field_map = {}
+    normalized_headers = {str(h).strip(): i for i, h in enumerate(headers) if h}
     if column_map:
         # column_map: {"patient_name": "患者姓名", "record_no": "住院号", ...}
-        header_idx = {h.strip(): i for i, h in enumerate(headers)}
         for field, col_name in column_map.items():
-            col_name = col_name.strip()
-            if col_name in header_idx:
-                field_map[header_idx[col_name]] = field
-    else:
-        # 自动匹配按中文名
-        reverse = {v: k for k, v in STANDARD_FIELDS.items()}
-        for i, h in enumerate(headers):
-            h = h.strip() if h else ""
-            if h in reverse:
-                field_map[i] = reverse[h]
+            col_name = str(col_name).strip()
+            if col_name in normalized_headers:
+                field_map[normalized_headers[col_name]] = field
+    for field, aliases in FIELD_ALIASES.items():
+        if field in field_map.values():
+            continue
+        for alias in aliases:
+            idx = normalized_headers.get(alias.strip())
+            if idx is not None:
+                field_map[idx] = field
+                break
     return field_map
 
 
@@ -137,6 +155,19 @@ def _parse_int(val):
         return None
 
 
+def _parse_age(val):
+    if val is None:
+        return None
+    text = str(val).strip()
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if digits:
+        try:
+            return int(digits)
+        except ValueError:
+            return None
+    return _parse_int(val)
+
+
 def _row_to_patient(row, field_map):
     p = {}
     for idx, field in field_map.items():
@@ -145,7 +176,7 @@ def _row_to_patient(row, field_map):
             if field in ("admission_date", "discharge_date"):
                 p[field] = _parse_date(val)
             elif field == "age":
-                p[field] = _parse_int(val)
+                p[field] = _parse_age(val)
             else:
                 p[field] = str(val).strip() if val else ""
     return p

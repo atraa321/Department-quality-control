@@ -26,7 +26,7 @@ echo [%date% %time%].
 
 echo [1/2] 启动服务端...
 >> "%LOG_FILE%" echo [%date% %time%] [1/2] 启动服务端...
-call "%ROOT%\启动服务器.bat" >> "%LOG_FILE%" 2>&1
+call "%SCRIPT_DIR%\start_server.bat" >> "%LOG_FILE%" 2>&1
 if errorlevel 1 (
     echo.
     echo [错误] 服务端启动失败，已停止后续步骤。日志：%LOG_FILE%
@@ -44,7 +44,7 @@ echo [2/2] 启动客户端...
 echo [%date% %time%].
 echo [%date% %time%] [2/2] 启动客户端...
 )>> "%LOG_FILE%"
-timeout /t 2 >nul
+ping 127.0.0.1 -n 3 >nul
 call "%ROOT%\启动客户端.bat" >> "%LOG_FILE%" 2>&1
 if errorlevel 1 (
     echo.
@@ -67,5 +67,5 @@ echo [%date% %time%] 全部组件已处理完成。
 echo [%date% %time%] 如需停止，请运行 退出运行.bat
 echo [%date% %time%] 日志文件：%LOG_FILE%
 )>> "%LOG_FILE%"
-timeout /t 2 >nul
+ping 127.0.0.1 -n 3 >nul
 exit /b 0

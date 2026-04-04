@@ -31,6 +31,7 @@ set "SYSTEM_ENSUREPIP_DIR=%SYSTEM_PYTHON_DIR%\Lib\ensurepip\_bundled"
 set "BUNDLED_SITE_PACKAGES=%ROOT%\python_deps"
 set "PYTHON=%ROOT%\.venv\Scripts\python.exe"
 set "RUN_PYTHON=%SYSTEM_PYTHON%"
+set "USE_BUNDLED_DEPS=0"
 
 call :ensure_not_running
 if errorlevel 3 goto :port_conflict
@@ -44,17 +45,23 @@ if not defined SYSTEM_PYTHON (
 
 set "PY_VER="
 for /f "tokens=2 delims= " %%i in ('"%SYSTEM_PYTHON%" --version 2^>^&1') do set "PY_VER=%%i"
-if not "%PY_VER:~0,3%"=="3.8" (
+if "%PY_VER:~0,2%" NEQ "3." (
     echo [ERROR] Detected Python version: %PY_VER%
-    echo         This backend bundle targets Python 3.8.x on Win7.
-    echo         Python 3.7 cannot install Flask 2.3.3.
+    echo         This backend bundle requires Python 3.8 or newer.
     goto :fail
 )
+if "%PY_VER:~0,3%"=="3.7" (
+    echo [ERROR] Detected Python version: %PY_VER%
+    echo         Python 3.7 is not supported by the current backend dependency chain.
+    echo         Install Python 3.8 or newer.
+    goto :fail
+)
+if "%PY_VER:~0,3%"=="3.8" set "USE_BUNDLED_DEPS=1"
 
 if not exist "%ROOT%\server\data" mkdir "%ROOT%\server\data"
 if not exist "%ROOT%\server\uploads" mkdir "%ROOT%\server\uploads"
 
-if exist "%BUNDLED_SITE_PACKAGES%\flask\__init__.py" (
+if "%USE_BUNDLED_DEPS%"=="1" if exist "%BUNDLED_SITE_PACKAGES%\flask\__init__.py" (
     echo [1/3] Use bundled offline Python dependencies...
     >> "%LOG_FILE%" echo [%date% %time%] [1/3] Use bundled offline Python dependencies...
     set "PYTHONPATH=%BUNDLED_SITE_PACKAGES%;%PYTHONPATH%"
@@ -65,6 +72,10 @@ if exist "%BUNDLED_SITE_PACKAGES%\flask\__init__.py" (
         goto :fail
     )
 ) else (
+    if "%USE_BUNDLED_DEPS%"=="0" (
+        echo [1/4] Detected Python %PY_VER%. Using a local virtual environment instead of Win7 offline deps...
+        >> "%LOG_FILE%" echo [%date% %time%] [1/4] Detected Python %PY_VER%. Using a local virtual environment instead of Win7 offline deps...
+    )
     call :ensure_venv
     if errorlevel 1 goto :fail
     set "RUN_PYTHON=%PYTHON%"

@@ -3,6 +3,9 @@ chcp 65001 >nul
 setlocal EnableExtensions
 title 科室质控平台退出
 
+set "NO_PAUSE="
+if /I "%~1"=="--nopause" set "NO_PAUSE=1"
+
 echo ================================================
 echo   科室质控平台 - 停止后台运行
 echo ================================================
@@ -16,8 +19,6 @@ set "LOG_DIR=%RUNTIME_DIR%\logs"
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 for /f %%i in ('powershell -NoProfile -Command "(Get-Date).ToString('yyyyMMdd_HHmmss')"') do set "TS=%%i"
 set "LOG_FILE=%LOG_DIR%\stop_all_%TS%.log"
-set "NO_PAUSE="
-if /I "%~1"=="--nopause" set "NO_PAUSE=1"
 
 if not exist "%RUNTIME_DIR%" (
     echo [状态] 当前没有后台运行标记。
@@ -30,8 +31,8 @@ if not exist "%RUNTIME_DIR%" (
     exit /b 0
 )
 
-call :stopByPidFile "%RUNTIME_DIR%\server.pid" "服务端"
-call :stopByPidFile "%RUNTIME_DIR%\client.pid" "客户端"
+call :stop_by_pid_file "%RUNTIME_DIR%\server.pid" "服务端"
+call :stop_by_pid_file "%RUNTIME_DIR%\client.pid" "客户端"
 
 echo.
 echo 处理完成。
@@ -45,7 +46,7 @@ for %%D in ("%RUNTIME_DIR%") do rd "%%~fD" 2>nul
 if not defined NO_PAUSE pause
 exit /b 0
 
-:stopByPidFile
+:stop_by_pid_file
 set "PIDFILE=%~1"
 set "LABEL=%~2"
 

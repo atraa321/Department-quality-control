@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from async_worker import start_async_task
 from config import save_config
 
 
@@ -199,6 +200,7 @@ class TaskManageWindow(QMainWindow):
         self.config = app_context.config
         self.tasks = []
         self.users = []
+        self._refresh_token = 0
         self.edit_dialog = TaskEditDialog(self)
 
         self.setWindowTitle("任务分配管理")
@@ -300,26 +302,41 @@ class TaskManageWindow(QMainWindow):
             self.close()
             return
 
-        try:
-            self.users = [item for item in self.api.list_users() if item.get("is_active")]
+        self._refresh_token += 1
+        token = self._refresh_token
+        self.summary_label.setText("任务分配加载中...")
+        params = {
+            "type": self.type_filter.currentData(),
+            "status": self.status_filter.currentData(),
+            "assigned_to": self.assignee_filter.currentData(),
+        }
+
+        def load():
+            users = [item for item in self.api.list_users() if item.get("is_active")]
+            tasks = self.api.list_tasks(**params)
+            return {"users": users, "tasks": tasks}
+
+        def on_success(payload):
+            if token != self._refresh_token:
+                return
+            self.users = payload["users"]
+            self.tasks = payload["tasks"]
             self._rebuild_user_filters()
-            self.tasks = self.api.list_tasks(
-                type=self.type_filter.currentData(),
-                status=self.status_filter.currentData(),
-                assigned_to=self.assignee_filter.currentData(),
-            )
             self.edit_dialog.load_users(self.users)
-        except Exception as exc:
+            self.summary_label.setText(f"当前共 {len(self.tasks)} 个任务")
+            self._populate_table()
+
+        def on_error(exc):
+            if token != self._refresh_token:
+                return
             if self.app_context.handle_api_error(exc, self, "加载任务分配失败"):
                 self.refresh_content(silent=silent)
                 return
             if not silent:
                 QMessageBox.warning(self, "刷新失败", str(exc))
             self.summary_label.setText("任务分配加载失败")
-            return
 
-        self.summary_label.setText(f"当前共 {len(self.tasks)} 个任务")
-        self._populate_table()
+        start_async_task(self, load, on_success, on_error)
 
     def _rebuild_user_filters(self):
         current = self.assignee_filter.currentData()
@@ -333,22 +350,27 @@ class TaskManageWindow(QMainWindow):
         self.assignee_filter.blockSignals(False)
 
     def _populate_table(self):
-        self.table.setRowCount(len(self.tasks))
-        for row, task in enumerate(self.tasks):
-            selected_item = QTableWidgetItem()
-            selected_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
-            selected_item.setCheckState(Qt.Unchecked)
-            selected_item.setData(Qt.UserRole, task)
-            self.table.setItem(row, 0, selected_item)
-            self.table.setItem(row, 1, QTableWidgetItem(task.get("title") or ""))
-            self.table.setItem(row, 2, QTableWidgetItem(TYPE_LABELS.get(task.get("type"), task.get("type") or "")))
-            self.table.setItem(row, 3, QTableWidgetItem(task.get("assignee_name") or ""))
-            self.table.setItem(row, 4, QTableWidgetItem("结转任务" if task.get("is_carryover") else "本期生成"))
-            self.table.setItem(row, 5, QTableWidgetItem(task.get("deadline") or ""))
-            self.table.setItem(row, 6, QTableWidgetItem(task.get("description") or ""))
-            self.table.setItem(row, 7, QTableWidgetItem(STATUS_LABELS.get(task.get("status"), task.get("status") or "")))
-        if self.tasks:
-            self.table.selectRow(0)
+        self.table.setUpdatesEnabled(False)
+        try:
+            self.table.setRowCount(len(self.tasks))
+            for row, task in enumerate(self.tasks):
+                selected_item = QTableWidgetItem()
+                selected_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
+                selected_item.setCheckState(Qt.Unchecked)
+                selected_item.setData(Qt.UserRole, task)
+                self.table.setItem(row, 0, selected_item)
+                self.table.setItem(row, 1, QTableWidgetItem(task.get("title") or ""))
+                self.table.setItem(row, 2, QTableWidgetItem(TYPE_LABELS.get(task.get("type"), task.get("type") or "")))
+                self.table.setItem(row, 3, QTableWidgetItem(task.get("assignee_name") or ""))
+                self.table.setItem(row, 4, QTableWidgetItem("结转任务" if task.get("is_carryover") else "本期生成"))
+                self.table.setItem(row, 5, QTableWidgetItem(task.get("deadline") or ""))
+                self.table.setItem(row, 6, QTableWidgetItem(task.get("description") or ""))
+                self.table.setItem(row, 7, QTableWidgetItem(STATUS_LABELS.get(task.get("status"), task.get("status") or "")))
+            if self.tasks:
+                self.table.selectRow(0)
+        finally:
+            self.table.setUpdatesEnabled(True)
+            self.table.viewport().update()
 
     def _selected_task(self):
         row = self.table.currentRow()

@@ -19,6 +19,8 @@
           <el-table :data="patients" stripe>
             <el-table-column prop="patient_name" label="患者姓名" width="100" />
             <el-table-column prop="record_no" label="病案号" width="120" />
+            <el-table-column prop="phone" label="电话" width="140" />
+            <el-table-column prop="address" label="住址" min-width="220" show-overflow-tooltip />
             <el-table-column prop="diagnosis" label="诊断" show-overflow-tooltip />
             <el-table-column prop="discharge_date" label="出院日期" width="110" />
             <el-table-column prop="attending_doctor" label="主管医师" width="100" />
@@ -101,7 +103,9 @@
     <!-- 回访对话框 -->
     <el-dialog v-model="followupDialog" :title="isEditMode ? '编辑回访' : '登记回访'" width="550px">
       <div v-if="!isEditMode" style="margin-bottom:16px;padding:12px;background:#f5f7fa;border-radius:8px">
-        <strong>{{ currentPatient.patient_name }}</strong> | {{ currentPatient.diagnosis }} | 出院：{{ currentPatient.discharge_date }}
+        <div><strong>{{ currentPatient.patient_name }}</strong> | {{ currentPatient.diagnosis }} | 出院：{{ currentPatient.discharge_date }}</div>
+        <div style="margin-top:6px;color:#606266">电话：{{ currentPatient.phone || "未登记" }}</div>
+        <div style="margin-top:4px;color:#606266">住址：{{ currentPatient.address || "未登记" }}</div>
       </div>
       <el-form :model="followupForm" label-width="90px">
         <el-form-item label="回访日期"><el-date-picker v-model="followupForm.followup_date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item>

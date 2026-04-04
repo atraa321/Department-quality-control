@@ -135,7 +135,7 @@ call :copy_dep_dir "%DEV_SITE_PACKAGES%\openpyxl-3.1.2.dist-info" "%PACKAGE_DIR%
 if errorlevel 1 goto :fail
 call :copy_dep_dir "%DEV_SITE_PACKAGES%\pytz" "%PACKAGE_DIR%\python_deps\pytz"
 if errorlevel 1 goto :fail
-call :copy_dep_dir "%DEV_SITE_PACKAGES%\pytz-2025.2.dist-info" "%PACKAGE_DIR%\python_deps\pytz-2025.2.dist-info"
+call :copy_dep_dir "%DEV_SITE_PACKAGES%\pytz-2026.1.post1.dist-info" "%PACKAGE_DIR%\python_deps\pytz-2026.1.post1.dist-info"
 if errorlevel 1 goto :fail
 call :copy_dep_file "%DEV_SITE_PACKAGES%\six.py" "%PACKAGE_DIR%\python_deps\six.py"
 if errorlevel 1 goto :fail

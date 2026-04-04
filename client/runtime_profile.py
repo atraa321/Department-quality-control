@@ -58,7 +58,7 @@ def build_runtime_profile(config=None):
         use_translucent_overlay=not compatibility_enabled,
         overlay_antialiasing=not compatibility_enabled,
         prefer_chromium_browser=compatibility_enabled,
-        defer_shell_init_ms=350 if compatibility_enabled else 0,
+        defer_shell_init_ms=500 if compatibility_enabled else 1200,
     )
 
 

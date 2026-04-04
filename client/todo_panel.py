@@ -13,6 +13,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from async_worker import start_async_task
+
 
 TYPE_LABELS = {
     "discussion": "病例讨论",
@@ -28,6 +30,7 @@ class TodoPanel(QWidget):
         self.app_context = app_context
         self.api = app_context.api
         self.tasks = []
+        self._refresh_token = 0
         self._init_ui()
 
     def _init_ui(self):
@@ -100,19 +103,32 @@ class TodoPanel(QWidget):
         layout.addWidget(self.tip_label)
 
     def refresh_tasks(self, silent=False):
-        try:
-            self.tasks = self.api.get_pending_tasks()
+        self._refresh_token += 1
+        token = self._refresh_token
+        self.summary_label.setText("待办加载中...")
+
+        def load():
+            return self.api.get_pending_tasks()
+
+        def on_success(tasks):
+            if token != self._refresh_token:
+                return
+            self.tasks = tasks
             self._update_table()
-            return True
-        except Exception as exc:
+
+        def on_error(exc):
+            if token != self._refresh_token:
+                return
             if self.app_context.handle_api_error(exc, self, "刷新待办失败"):
                 self.refresh_tasks(silent=silent)
-                return True
+                return
             if not silent:
                 QMessageBox.warning(self, "刷新失败", str(exc))
             self.summary_label.setText("待办加载失败")
             self.table.setRowCount(0)
-            return False
+
+        start_async_task(self, load, on_success, on_error)
+        return True
 
     def _filtered_tasks(self):
         selected_type = self.type_filter.currentData()

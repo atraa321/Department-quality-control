@@ -536,20 +536,20 @@ class AppContext:
 
     def _schedule_shell_components_initialization(self):
         delay = max(int(self.runtime_profile.defer_shell_init_ms or 0), 0)
-        if delay <= 0:
-            self._initialize_shell_components()
-            return
         QTimer.singleShot(delay, self._initialize_shell_components)
 
     def _initialize_shell_components(self):
-        if self.overlay is None:
-            self.overlay = OverlayWidget(self)
-            self.overlay.show()
-
         if self.tray is None and QSystemTrayIcon.isSystemTrayAvailable():
             self.tray = TrayIcon(self)
         elif self.tray is None:
             print("系统托盘不可用，已跳过托盘图标初始化。")
+        QTimer.singleShot(300, self._initialize_overlay)
+
+    def _initialize_overlay(self):
+        if self.overlay is not None:
+            return
+        self.overlay = OverlayWidget(self)
+        self.overlay.show()
 
     def _resolve_browser_path(self):
         browser_path = (self.config.get("browser_path") or "").strip()

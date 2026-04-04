@@ -1,4 +1,6 @@
-from PyQt5.QtCore import Qt, QDate
+import time
+
+from PyQt5.QtCore import Qt, QDate, QTimer
 from PyQt5.QtWidgets import (
     QFrame,
     QComboBox,
@@ -22,6 +24,7 @@ from PyQt5.QtWidgets import (
 )
 
 from config import save_config
+from async_worker import start_async_task
 
 
 class CheckEditDialog(QDialog):
@@ -321,6 +324,8 @@ class CheckEditDialog(QDialog):
 
 
 class CheckWindow(QMainWindow):
+    AUTO_REFRESH_INTERVAL_MS = 15000
+
     def __init__(self, app_context, parent=None):
         super().__init__(parent)
         self.app_context = app_context
@@ -333,6 +338,8 @@ class CheckWindow(QMainWindow):
         self.current_user = {}
         self.pending_tasks = []
         self.pending_focus = {"task_id": None, "check_id": None}
+        self._last_refresh_at = None
+        self._refresh_token = 0
         self.edit_dialog = CheckEditDialog(app_context, self)
 
         self.setWindowTitle("病历质控检查")
@@ -500,43 +507,68 @@ class CheckWindow(QMainWindow):
             "task_id": task.get("id") if task else None,
             "check_id": check_id,
         }
-        self.show()
-        self.raise_()
-        self.activateWindow()
-        self.refresh_content(silent=True)
+        if self.should_auto_refresh():
+            self.schedule_refresh()
+        else:
+            self._focus_target()
 
     def refresh_content(self, silent=False):
-        try:
+        self._refresh_token += 1
+        token = self._refresh_token
+        self.summary_label.setText("病历检查加载中...")
+        start = self.start_date.date().toString("yyyy-MM-dd")
+        end = self.end_date.date().toString("yyyy-MM-dd")
+
+        def load():
             meta = self.api.get_checks_meta()
-            self.categories = meta.get("categories") or []
-            self.doctors = meta.get("doctors") or []
-            self.current_user = meta.get("current_user") or {}
-            self.pending_tasks = [
+            pending_tasks = [
                 task for task in self.api.list_tasks(type="check")
                 if task.get("status") != "completed" and task.get("check_task_kind") != "rectification"
             ]
+            return {
+                "categories": meta.get("categories") or [],
+                "doctors": meta.get("doctors") or [],
+                "current_user": meta.get("current_user") or {},
+                "pending_tasks": pending_tasks,
+                "records": self.api.list_checks(start=start, end=end),
+                "stats": self.api.get_check_stats(start=start, end=end),
+            }
+
+        def on_success(payload):
+            if token != self._refresh_token:
+                return
+            self.categories = payload["categories"]
+            self.doctors = payload["doctors"]
+            self.current_user = payload["current_user"]
+            self.pending_tasks = payload["pending_tasks"]
+            self.records = payload["records"]
+            self.stats = payload["stats"]
             self._rebuild_filter_options()
-            self.records = self.api.list_checks(
-                start=self.start_date.date().toString("yyyy-MM-dd"),
-                end=self.end_date.date().toString("yyyy-MM-dd"),
-            )
-            self.stats = self.api.get_check_stats(
-                start=self.start_date.date().toString("yyyy-MM-dd"),
-                end=self.end_date.date().toString("yyyy-MM-dd"),
-            )
             self.edit_dialog.load_meta(self.categories, self.doctors, self.current_user, self.pending_tasks)
-        except Exception as exc:
+            self._last_refresh_at = time.monotonic()
+            self._apply_filters()
+            self._populate_stats()
+            self._focus_target()
+
+        def on_error(exc):
+            if token != self._refresh_token:
+                return
             if self.app_context.handle_api_error(exc, self, "加载病历检查失败"):
                 self.refresh_content(silent=silent)
                 return
             if not silent:
                 QMessageBox.warning(self, "刷新失败", str(exc))
             self.summary_label.setText("病历检查加载失败")
-            return
 
-        self._apply_filters()
-        self._populate_stats()
-        self._focus_target()
+        start_async_task(self, load, on_success, on_error)
+
+    def should_auto_refresh(self):
+        if self._last_refresh_at is None:
+            return True
+        return (time.monotonic() - self._last_refresh_at) * 1000 >= self.AUTO_REFRESH_INTERVAL_MS
+
+    def schedule_refresh(self, delay_ms=0):
+        QTimer.singleShot(max(0, int(delay_ms)), lambda: self.refresh_content(silent=True))
 
     def _rebuild_filter_options(self):
         current_category = self.category_filter.currentData()

@@ -1,4 +1,6 @@
-from PyQt5.QtCore import Qt
+import time
+
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -85,6 +87,8 @@ SECTION_DEFINITIONS = {
 
 
 class MainWorkspaceWindow(QMainWindow):
+    AUTO_REFRESH_INTERVAL_MS = 15000
+
     def __init__(self, app_context, parent=None):
         super().__init__(parent)
         self.app_context = app_context
@@ -93,11 +97,14 @@ class MainWorkspaceWindow(QMainWindow):
         self.current_section = "dashboard"
         self._nav_items = {}
         self._section_pages = {}
+        self._loaded_sections = set()
+        self._pending_refresh_section = None
+        self._section_refresh_at = {}
 
         self.setWindowTitle("科室质控平台")
         self.resize(1180, 760)
         self._init_ui()
-        self.refresh_content(silent=True)
+        self._sync_shell_state()
 
     def _style_action_button(self, button, primary=False):
         button.setMinimumHeight(42)
@@ -219,6 +226,26 @@ class MainWorkspaceWindow(QMainWindow):
     def get_section_page(self, section):
         return self._ensure_section_page(section)
 
+    def has_loaded_section(self, section):
+        return section in self._loaded_sections
+
+    def should_auto_refresh_section(self, section, max_age_ms=None):
+        if section not in self._loaded_sections:
+            return True
+        refreshed_at = self._section_refresh_at.get(section)
+        if refreshed_at is None:
+            return True
+        age_ms = (time.monotonic() - refreshed_at) * 1000
+        interval_ms = self.AUTO_REFRESH_INTERVAL_MS if max_age_ms is None else max_age_ms
+        return age_ms >= interval_ms
+
+    def schedule_section_refresh(self, section=None, delay_ms=120, force=False):
+        target_section = section or self.current_section
+        if not force and not self.should_auto_refresh_section(target_section):
+            return
+        self._pending_refresh_section = target_section
+        QTimer.singleShot(max(0, int(delay_ms)), self._run_pending_section_refresh)
+
     def open_section(self, section, refresh=True):
         if section not in self._nav_items:
             section = "dashboard"
@@ -233,14 +260,17 @@ class MainWorkspaceWindow(QMainWindow):
         self._apply_section(section, refresh=refresh)
 
     def refresh_content(self, silent=False):
+        self._sync_shell_state()
+        refreshed = self._refresh_section(self.current_section, silent=silent, force=True)
+        self.status_label.setText("状态：已同步最新数据" if refreshed else "状态：同步失败")
+
+    def _sync_shell_state(self):
         user = self.config.get("user") or {}
         display_name = user.get("real_name") or user.get("username") or "未登录"
         role = ROLE_LABELS.get(user.get("role"), user.get("role") or "未知角色")
         self.user_label.setText(f"{display_name} | {role}")
         self.status_label.setText("状态：准备就绪")
         self._rebuild_navigation()
-        refreshed = self._refresh_section(self.current_section, silent=silent)
-        self.status_label.setText("状态：已同步最新数据" if refreshed else "状态：同步失败")
 
     def _handle_nav_changed(self, current, previous):
         if current is None:
@@ -254,7 +284,8 @@ class MainWorkspaceWindow(QMainWindow):
         self.browser_button.setVisible(bool(definition.get("browser_path")))
         self.stack.setCurrentWidget(self._ensure_section_page(section))
         if refresh:
-            self._refresh_section(section, silent=True)
+            self.status_label.setText("状态：准备就绪")
+            self.schedule_section_refresh(section, delay_ms=0)
 
     def _ensure_section_page(self, section):
         page = self._section_pages.get(section)
@@ -289,23 +320,33 @@ class MainWorkspaceWindow(QMainWindow):
             return self.todo_page
         return self.dashboard_page
 
-    def _refresh_section(self, section, silent=False):
+    def _refresh_section(self, section, silent=False, force=False):
+        if not force and not self.should_auto_refresh_section(section):
+            return True
         page = self._ensure_section_page(section)
         try:
             if section == "dashboard":
-                return bool(page.refresh_content(silent=silent))
+                result = bool(page.refresh_content(silent=silent))
+                if result:
+                    self._mark_section_refreshed(section)
+                return result
             if section == "todo":
                 page.refresh_tasks(silent=silent)
+                self._mark_section_refreshed(section)
                 return True
 
             refresh = getattr(page, "refresh_content", None)
             if not callable(refresh):
+                self._mark_section_refreshed(section)
                 return True
             try:
                 result = refresh(silent=silent)
             except TypeError:
                 result = refresh()
-            return True if result is None else bool(result)
+            success = True if result is None else bool(result)
+            if success:
+                self._mark_section_refreshed(section)
+            return success
         except Exception:
             return False
 
@@ -314,3 +355,18 @@ class MainWorkspaceWindow(QMainWindow):
         path = definition.get("browser_path")
         if path:
             self.app_context.open_browser(path)
+
+    def _run_pending_section_refresh(self):
+        section = self._pending_refresh_section
+        if not section:
+            return
+        self._pending_refresh_section = None
+        if section != self.current_section:
+            return
+        self._sync_shell_state()
+        refreshed = self._refresh_section(section, silent=True)
+        self.status_label.setText("状态：已同步最新数据" if refreshed else "状态：同步失败")
+
+    def _mark_section_refreshed(self, section):
+        self._loaded_sections.add(section)
+        self._section_refresh_at[section] = time.monotonic()

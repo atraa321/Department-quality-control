@@ -125,6 +125,11 @@ def _ensure_schema_updates():
             ("rectified_by", "ALTER TABLE medical_record_checks ADD COLUMN rectified_by INTEGER"),
             ("rectification_task_id", "ALTER TABLE medical_record_checks ADD COLUMN rectification_task_id INTEGER"),
         ],
+        "discharged_patients": [
+            ("phone", "ALTER TABLE discharged_patients ADD COLUMN phone VARCHAR(64) DEFAULT ''"),
+            ("address", "ALTER TABLE discharged_patients ADD COLUMN address VARCHAR(255) DEFAULT ''"),
+            ("discharge_department", "ALTER TABLE discharged_patients ADD COLUMN discharge_department VARCHAR(128) DEFAULT ''"),
+        ],
     }
 
     for table_name, columns in schema_updates.items():

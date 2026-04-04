@@ -13,6 +13,8 @@ from PyQt5.QtWidgets import (
     QHeaderView,
 )
 
+from async_worker import start_async_task
+
 
 TYPE_LABELS = {
     "discussion": "病例讨论",
@@ -31,6 +33,7 @@ class DashboardPage(QWidget):
         self.api = app_context.api
         self.config = app_context.config
         self.tasks = []
+        self._refresh_token = 0
         self._init_ui()
 
     def _init_ui(self):
@@ -123,9 +126,31 @@ class DashboardPage(QWidget):
         layout.addWidget(actions_frame, 1)
 
     def refresh_content(self, silent=False):
-        try:
-            payload = self.api.get_dashboard_summary()
-        except Exception as exc:
+        self._refresh_token += 1
+        token = self._refresh_token
+        self.summary_label.setText("最近任务：加载中...")
+
+        def load():
+            return self.api.get_dashboard_summary()
+
+        def on_success(payload):
+            if token != self._refresh_token:
+                return
+            pending_tasks = payload.get("pending_tasks") or []
+            stats = payload.get("stats") or {}
+            self.tip_label.setText(LEGACY_TIP_TEXT if payload.get("legacy_fallback") else DEFAULT_TIP_TEXT)
+            self.tasks = pending_tasks[:8]
+
+            self.pending_card.value_label.setText(str(stats.get("pending_tasks", 0)))
+            self.overdue_card.value_label.setText(str(stats.get("overdue_tasks", 0)))
+            self.completed_card.value_label.setText(str(stats.get("completed_tasks", 0)))
+            self.followup_card.value_label.setText(str(stats.get("pending_followups", 0)))
+            self.summary_label.setText(self._format_summary(pending_tasks, stats.get("overdue_tasks", 0)))
+            self._populate_table()
+
+        def on_error(exc):
+            if token != self._refresh_token:
+                return
             if self.app_context.handle_api_error(exc, self, "刷新 Dashboard 失败"):
                 self.refresh_content(silent=silent)
                 return
@@ -136,19 +161,8 @@ class DashboardPage(QWidget):
             self.task_table.setRowCount(0)
             if not silent:
                 QMessageBox.warning(self, "刷新失败", str(exc))
-            return False
 
-        pending_tasks = payload.get("pending_tasks") or []
-        stats = payload.get("stats") or {}
-        self.tip_label.setText(LEGACY_TIP_TEXT if payload.get("legacy_fallback") else DEFAULT_TIP_TEXT)
-        self.tasks = pending_tasks[:8]
-
-        self.pending_card.value_label.setText(str(stats.get("pending_tasks", 0)))
-        self.overdue_card.value_label.setText(str(stats.get("overdue_tasks", 0)))
-        self.completed_card.value_label.setText(str(stats.get("completed_tasks", 0)))
-        self.followup_card.value_label.setText(str(stats.get("pending_followups", 0)))
-        self.summary_label.setText(self._format_summary(pending_tasks, stats.get("overdue_tasks", 0)))
-        self._populate_table()
+        start_async_task(self, load, on_success, on_error)
         return True
 
     def _populate_table(self):
